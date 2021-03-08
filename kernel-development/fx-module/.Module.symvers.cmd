@@ -1,0 +1,1 @@
+cmd_/home/lore/tesi/kernel-development/fx-module/Module.symvers := sed 's/\.ko$$/\.o/' /home/lore/tesi/kernel-development/fx-module/modules.order | scripts/mod/modpost     -o /home/lore/tesi/kernel-development/fx-module/Module.symvers -e -i Module.symvers   -T -

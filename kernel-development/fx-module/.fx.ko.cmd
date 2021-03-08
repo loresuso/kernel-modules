@@ -1,0 +1,1 @@
+cmd_/home/lore/tesi/kernel-development/fx-module/fx.ko := ld -r -m elf_x86_64  --build-id=sha1  -T scripts/module.lds -o /home/lore/tesi/kernel-development/fx-module/fx.ko /home/lore/tesi/kernel-development/fx-module/fx.o /home/lore/tesi/kernel-development/fx-module/fx.mod.o;  true
