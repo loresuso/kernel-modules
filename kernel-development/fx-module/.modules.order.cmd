@@ -1,1 +1,1 @@
-cmd_/home/lore/tesi/kernel-development/fx-module/modules.order := {   echo /home/lore/tesi/kernel-development/fx-module/fx.ko; :; } | awk '!x[$$0]++' - > /home/lore/tesi/kernel-development/fx-module/modules.order
+cmd_/home/lore/MasterThesis/kernel-development/fx-module/modules.order := {   echo /home/lore/MasterThesis/kernel-development/fx-module/fx.ko; :; } | awk '!x[$$0]++' - > /home/lore/MasterThesis/kernel-development/fx-module/modules.order

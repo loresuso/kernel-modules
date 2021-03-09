@@ -2,8 +2,8 @@
 qemu-system-x86_64 \
     -device edu \
     -enable-kvm \
-    -kernel bzImage \
+    -kernel ./bzImage \
     -boot c \
     -m 1024M \
-    -hda rootfs.ext2 \
+    -hda ./rootfs.ext2 \
     -append "root=/dev/sda rw acpi=off nokaslr" 
