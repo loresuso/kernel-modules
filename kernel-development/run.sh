@@ -1,6 +1,7 @@
 #!/bin/sh
 qemu-system-x86_64 \
     -device edu \
+    -device fx \
     -enable-kvm \
     -kernel ./bzImage \
     -boot c \
