@@ -1,0 +1,1 @@
+/home/lore/MasterThesis/qemu/contrib/plugins/Makefile
