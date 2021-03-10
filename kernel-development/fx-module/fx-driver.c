@@ -32,9 +32,10 @@ MODULE_DEVICE_TABLE(pci, pci_ids);
 static irqreturn_t irq_handler(int irq, void *dev){
     u32 irq_status;
     printk("Got an interrupt");
-    /* Ack the interrupt */
+    /* ack the interrupt */
     irq_status = ioread32(mmio + INTERRUPT_STATUS_REGISTER);
     iowrite32(irq_status, mmio + INTERRUPT_ACK_REGISTER);
+    /* write the address of where kvm has to put the code */
     iowrite32(0xAAAAAAAA, mmio + ADDR_REGISTER);
     return IRQ_HANDLED;
 }
