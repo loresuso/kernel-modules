@@ -1,1 +1,0 @@
-cmd_/home/lore/MasterThesis/kernel-development/fx-module/fx.ko := ld -r -m elf_x86_64  --build-id=sha1  -T scripts/module.lds -o /home/lore/MasterThesis/kernel-development/fx-module/fx.ko /home/lore/MasterThesis/kernel-development/fx-module/fx.o /home/lore/MasterThesis/kernel-development/fx-module/fx.mod.o;  true

@@ -2,16 +2,19 @@
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 
-/**************************
+/*
 *    PCI constants
-***************************/
+*/
 #define VENDOR_ID 0x1234
-#define DEVICE_ID 0x11e8
+#define DEVICE_ID 0x0609
 #define BAR 0
-/* Registers */
-#define IO_IRQ_STATUS 0x24
-#define IO_IRQ_ACK 0x64
-#define IO_RAISE_INTERRUPT 0x60
+
+#define ID_REGISTER                 0x00
+#define CARD_LIVENESS_REGISTER      0x04
+#define ADDR_REGISTER               0x08
+#define INTERRUPT_STATUS_REGISTER   0x24
+#define INTERRUPT_RAISE_REGISTER    0x60
+#define INTERRUPT_ACK_REGISTER      0x64
 
 MODULE_AUTHOR("Lorenzo Susini");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -27,7 +30,12 @@ static struct pci_device_id pci_ids[] = {
 MODULE_DEVICE_TABLE(pci, pci_ids);
 
 static irqreturn_t irq_handler(int irq, void *dev){
+    u32 irq_status;
     printk("Got an interrupt");
+    /* Ack the interrupt */
+    irq_status = ioread32(mmio + INTERRUPT_STATUS_REGISTER);
+    iowrite32(irq_status, mmio + INTERRUPT_ACK_REGISTER);
+    iowrite32(0xAAAAAAAA, mmio + ADDR_REGISTER);
     return IRQ_HANDLED;
 }
 
@@ -41,8 +49,8 @@ static irqreturn_t irq_handler(int irq, void *dev){
 */
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id){
     u8 val;
-	pr_info("pci_probe\n");
-    printk("Vendor: 0x%x, Device: 0x%x\n", dev->vendor, dev->device);
+    u32 device_version;
+    u32 card_liveness;
     pdev = dev;
     if(pci_enable_device(pdev) < 0){
         dev_err(&(pdev->dev), "error in pci_enable_device\n");
@@ -62,12 +70,19 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id){
 		return -1;
 	}
 
-    iowrite32(0x1234, mmio + IO_RAISE_INTERRUPT);
+    /* Checks */
+    device_version = ioread32(mmio + ID_REGISTER);
+    printk("Device version ID: 0x%x", device_version);
+    iowrite32(0x123, mmio + CARD_LIVENESS_REGISTER);
+    card_liveness = ioread32(mmio + CARD_LIVENESS_REGISTER);
+    printk("Card Liveness (must be 0xff...ff): %d", 0x123 + card_liveness);
+
     return 0;
 }
 
 static void pci_remove(struct pci_dev *dev){
 	pr_info("pci_remove\n");
+    pci_release_region(dev, BAR);
 }
 
 static struct pci_driver pci_driver = { 

@@ -1,4 +1,4 @@
-obj-m:=fx.o
+obj-m:=fx-driver.o
 all:
 	make -C /home/lore/MasterThesis/linux M=$(shell pwd) modules
 clean:

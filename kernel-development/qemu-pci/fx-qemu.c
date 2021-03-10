@@ -19,8 +19,12 @@ typedef struct FxState FxState;
 DECLARE_INSTANCE_CHECKER(FxState, FX,
                          TYPE_PCI_FXPCI_DEVICE)
 
-#define ID_REGISTER         0x00
-#define ADDR_REGISTER       0x08
+#define ID_REGISTER                 0x00
+#define CARD_LIVENESS_REGISTER      0x04
+#define ADDR_REGISTER               0x08
+#define INTERRUPT_STATUS_REGISTER   0x24
+#define INTERRUPT_RAISE_REGISTER    0x60
+#define INTERRUPT_ACK_REGISTER      0x64
 
 struct FxState {
     PCIDevice pdev;
@@ -33,13 +37,15 @@ struct FxState {
     QemuCond thr_cond; 
     bool stopping;
 
-    uint32_t pending_irq;
-    uint64_t addr;
+    uint32_t irq_status;
+    uint32_t card_liveness;
+    uint32_t addr_lsb; 
+    uint32_t addr_msb; 
 };
 
 static bool fx_msi_enabled(FxState *);
-static void fx_raise_irq(FxState *);
-static void fx_lower_irq(FxState *);
+static void fx_raise_irq(FxState *, uint32_t);
+static void fx_lower_irq(FxState *, uint32_t);
 static uint64_t fx_mmio_read(void *, hwaddr, unsigned);
 static void fx_mmio_write(void *, hwaddr, uint64_t, unsigned);
 static void *fx_forcer_thread(void *);
@@ -55,11 +61,11 @@ static const MemoryRegionOps fx_mmio_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
     .valid = {
         .min_access_size = 4,
-        .max_access_size = 8,
+        .max_access_size = 4,
     },
     .impl = {
         .min_access_size = 4,
-        .max_access_size = 8,
+        .max_access_size = 4,
     },
 };
 
@@ -68,33 +74,46 @@ static bool fx_msi_enabled(FxState *fx)
     return msi_enabled(&fx->pdev);
 }
 
-static void fx_raise_irq(FxState *fx)
+static void fx_raise_irq(FxState *fx, uint32_t val)
 {
-    if (fx_msi_enabled(fx)) {
-        msi_notify(&fx->pdev, 0);
-    } else {
-        pci_set_irq(&fx->pdev, 1);
+    fx->irq_status |= val;
+    if(fx->irq_status){
+        if (fx_msi_enabled(fx)) {
+            msi_notify(&fx->pdev, 0);
+        } else {
+            pci_set_irq(&fx->pdev, 1);
+        }
     }
 }
 
-static void fx_lower_irq(FxState *fx)
+static void fx_lower_irq(FxState *fx, uint32_t val)
 {
-    if (!fx_msi_enabled(fx)) {
+    fx->irq_status &= ~val;
+
+    if (!fx->irq_status && !fx_msi_enabled(fx)) {
         pci_set_irq(&fx->pdev, 0);
     }
 }
 
 static uint64_t fx_mmio_read(void *opaque, hwaddr addr, unsigned size)
 {
-    //FxState *fx = opaque;
+    FxState *fx = opaque;
     uint64_t val = ~0ULL;
 
-    if(size != 8)
+    if(size != 4)
         return val;
 
     switch (addr) {
         case ID_REGISTER:
-            val = 0x010000edu;
+        /* let the device driver check version. 0xMMmm0edu */
+            val = 0x01000edu;
+            break;
+        /* card liveness for sanity checks */
+        case CARD_LIVENESS_REGISTER:
+            val = fx->card_liveness;
+            break;
+        case INTERRUPT_STATUS_REGISTER:
+            val = fx->irq_status;
             break;
         default:
             break;
@@ -108,17 +127,21 @@ static void fx_mmio_write(void *opaque, hwaddr addr, uint64_t val,
 {
     FxState *fx = opaque;
 
-    if(size != 8)
+    if(size != 4)
         return;
 
     switch (addr) {
     case ADDR_REGISTER:
         qemu_mutex_lock(&fx->thr_mutex);
-        fx->pending_irq = 0;
-        fx->addr = val;
-        fx_lower_irq(fx);
+        fx->addr_lsb = val;
         qemu_cond_signal(&fx->thr_cond);
         qemu_mutex_unlock(&fx->thr_mutex);
+        break;
+    case INTERRUPT_RAISE_REGISTER:
+    //  fx_raise_irq(fx, val);
+        break;
+    case INTERRUPT_ACK_REGISTER:
+        fx_lower_irq(fx, val);
         break;
     default:
         break;
@@ -130,14 +153,12 @@ static void *fx_forcer_thread(void *opaque)
     FxState *fx = opaque;
 
     while (1) {
-        uint64_t addr;
 
-        g_usleep(5 * G_USEC_PER_SEC);
+        g_usleep(10 * G_USEC_PER_SEC);
 
         qemu_mutex_lock(&fx->thr_mutex);
-        fx_raise_irq(fx);
-        fx->pending_irq = 1;
-        while((qatomic_read(&fx->pending_irq) == 1)){
+        fx_raise_irq(fx, 0x1);
+        while((qatomic_read(&fx->addr_lsb) == 0)){
             qemu_cond_wait(&fx->thr_cond, &fx->thr_mutex);
         }
 
@@ -146,14 +167,13 @@ static void *fx_forcer_thread(void *opaque)
             break;
         }
 
-        addr = fx->addr;
+        printf("thread read fx->addr_lsb = 0x%x\n", fx->addr_lsb);
 
         qemu_mutex_unlock(&fx->thr_mutex);
 
         /*
         *   DO THE KVM STUFF HERE
         */ 
-        fprintf(stderr, "forcer thread restart its actions, addr = 0x%lx", addr);
 
     }
 
@@ -201,8 +221,7 @@ static void fx_instance_init(Object *obj)
 {
     FxState *fx = FX(obj);
 
-    fx->pending_irq = 0;
-    fx->addr = 0ULL;
+    fx->addr_lsb = 0;
 }
 
 static void fx_class_init(ObjectClass *class, void *data)
@@ -213,7 +232,7 @@ static void fx_class_init(ObjectClass *class, void *data)
     k->realize = pci_fx_realize;
     k->exit = pci_fx_uninit;
     k->vendor_id = PCI_VENDOR_ID_QEMU;
-    k->device_id = 0x11ff;
+    k->device_id = 0x0609;
     k->revision = 0x10;
     k->class_id = PCI_CLASS_OTHERS;
     set_bit(DEVICE_CATEGORY_MISC, dc->categories);
