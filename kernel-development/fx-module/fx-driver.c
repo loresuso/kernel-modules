@@ -1,6 +1,6 @@
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <linux/interrupt.h>
+#include <asm/desc.h>
 
 /*
 *    PCI constants
@@ -40,14 +40,6 @@ static irqreturn_t irq_handler(int irq, void *dev){
     return IRQ_HANDLED;
 }
 
-/*  This probing function gets called (during execution of pci_register_driver() 
-*   for already existing devices or later if a new device gets inserted) for all
-*   PCI devices which match the ID table and are not “owned” by the other drivers yet.
-*   This function gets passed a “struct pci_dev *” for each device whose entry in the 
-*   ID table matches the device. The probe function returns zero when the driver 
-*   chooses to take “ownership” of the device or an error code (negative number) otherwise.
-*   The probe function always gets called from process context, so it can sleep.
-*/
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id){
     u8 val;
     u32 device_version;
@@ -94,12 +86,15 @@ static struct pci_driver pci_driver = {
 };
 
 static int m1_init(void) {
+    struct desc_ptr *descriptor = kmalloc(sizeof(struct desc_ptr), GFP_KERNEL);
+    store_idt(descriptor);
     printk("FX - Force eXecution started \n");
+    printk("IDT addres is 0x%lx", descriptor->address, descriptor);
+    kfree(descriptor);
     if(pci_register_driver(&pci_driver) < 0){
         printk("Cannot register PCI driver");
         return 1;
     }
-    printk("PCI driver registered succesfully");
     return 0;
 }
 
