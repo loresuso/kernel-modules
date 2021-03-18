@@ -1,10 +1,9 @@
 #!/usr/bin/python3
 import sys
+import os
 
 def usage():
     print("Easily find what you need from /proc/pid/maps !")
-    print("Usage: maps-finder.py pid address")
-    print("Example: ./maps-finder.py 8805 0x7fdde7ffb170")
 
 def within(target, addr1, addr2):
     if target >= addr1 and target <= addr2:
@@ -12,16 +11,37 @@ def within(target, addr1, addr2):
     return False
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 2:
         usage()
         exit()
 
-    pid = sys.argv[1]
-    address = int(sys.argv[2], 16)
-    filename = "/proc/{}/maps".format(pid)
+    try:
+        address = int(sys.argv[1], 16)
+    except:
+        print("Error")
+        exit()
+    
+    path = "/proc/"
+    maps = path + "{}/maps"
+    comm = path + "{}/comm"
+    dirs = os.listdir(path)
+    pid = ""
+
+    for dir in dirs:
+        try:
+            f = open(comm.format(dir), "r")
+            line = f.readline()
+            if "qemu" in line:
+                pid = dir
+                break
+        except:
+            continue
+
+    if pid == "":
+        exit()
 
     try: 
-        f = open(filename, "r")
+        f = open(maps.format(pid), "r")
         lines = f.readlines()
         for line in lines:
             fields = line.split()

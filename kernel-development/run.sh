@@ -8,4 +8,6 @@ qemu-system-x86_64 \
     -m 1024M \
     -hda ./rootfs.ext2 \
     -k it \
+    -s \
+    -monitor stdio \
     -append "root=/dev/sda rw acpi=off nokaslr" \

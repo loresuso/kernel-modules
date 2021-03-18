@@ -15,6 +15,7 @@
 #define INTERRUPT_STATUS_REGISTER   0x24
 #define INTERRUPT_RAISE_REGISTER    0x60
 #define INTERRUPT_ACK_REGISTER      0x64
+#define PROTECT_IDT_COMMAND         0x80
 
 MODULE_AUTHOR("Lorenzo Susini");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -43,7 +44,6 @@ static irqreturn_t irq_handler(int irq, void *dev){
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id){
     u8 val;
     u32 device_version;
-    u32 card_liveness;
     pdev = dev;
     if(pci_enable_device(pdev) < 0){
         dev_err(&(pdev->dev), "error in pci_enable_device\n");
@@ -62,13 +62,11 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id){
 		dev_err(&(dev->dev), "request_irq\n");
 		return -1;
 	}
-
+    /* Protect IDT command */
+    iowrite32(0x1, mmio + PROTECT_IDT_COMMAND);
     /* Checks */
     device_version = ioread32(mmio + ID_REGISTER);
     printk("Device version ID: 0x%x", device_version);
-    iowrite32(0x123, mmio + CARD_LIVENESS_REGISTER);
-    card_liveness = ioread32(mmio + CARD_LIVENESS_REGISTER);
-    printk("Card Liveness (must be 0xff...ff): %d", 0x123 + card_liveness);
 
     return 0;
 }
@@ -89,7 +87,8 @@ static int m1_init(void) {
     struct desc_ptr *descriptor = kmalloc(sizeof(struct desc_ptr), GFP_KERNEL);
     store_idt(descriptor);
     printk("FX - Force eXecution started \n");
-    printk("IDT addres is 0x%lx", descriptor->address, descriptor);
+    printk("IDT address is 0x%lx", descriptor->address);
+    printk("irq_handler_address: %p", irq_handler);
     kfree(descriptor);
     if(pci_register_driver(&pci_driver) < 0){
         printk("Cannot register PCI driver");
@@ -99,7 +98,7 @@ static int m1_init(void) {
 }
 
 static void m1_exit(void) {
-    pci_unregister_driver(&pci_driver);
+    //pci_unregister_driver(&pci_driver);
     printk("FX - Force eXecution removed \n");
 }
 
