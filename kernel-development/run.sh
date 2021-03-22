@@ -6,6 +6,7 @@ qemu-system-x86_64 \
     -kernel ./bzImage \
     -boot c \
     -m 1024M \
+    -cpu host \
     -hda ./rootfs.ext2 \
     -k it \
     -s \

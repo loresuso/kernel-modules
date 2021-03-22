@@ -1,0 +1,1 @@
+cmd_/home/lore/MasterThesis/kernel-development/find-all-syms-module/finder.ko := ld -r -m elf_x86_64  --build-id=sha1  -T scripts/module.lds -o /home/lore/MasterThesis/kernel-development/find-all-syms-module/finder.ko /home/lore/MasterThesis/kernel-development/find-all-syms-module/finder.o /home/lore/MasterThesis/kernel-development/find-all-syms-module/finder.mod.o;  true

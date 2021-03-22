@@ -1,6 +1,13 @@
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/kernel.h>
 #include <asm/desc.h>
+#include <linux/irq.h>
+#include <linux/interrupt.h> 
+#include <linux/kprobes.h>
+
+MODULE_AUTHOR("Lorenzo Susini");
+MODULE_LICENSE("GPL");
 
 /*
 *    PCI constants
@@ -17,9 +24,48 @@
 #define INTERRUPT_ACK_REGISTER      0x64
 #define PROTECT_IDT_COMMAND         0x80
 
-MODULE_AUTHOR("Lorenzo Susini");
-MODULE_LICENSE("Dual BSD/GPL");
+/*
+*    Kprobes, for accessing all kernel code
+*/
+#define KPROBE_PRE_HANDLER(fname) static int __kprobes fname(struct kprobe *p, struct pt_regs *regs)
+long unsigned kln_addr = 0; /* kallsym_loop_name address*/
+unsigned long (*kln_pointer)(const char* name); /* kallsym_loop_name function pointer */
+struct irq_desc *(*i2d_pointer)(int irq); /* irq_to_desc function pointer */
 
+static struct kprobe kp0, kp1;
+
+KPROBE_PRE_HANDLER(handler_pre0)
+{
+  kln_addr = (--regs->ip);
+  return 0;
+}
+
+KPROBE_PRE_HANDLER(handler_pre1)
+{
+  return 0;
+}
+
+static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handler)
+{
+  int ret;
+  
+  kp->symbol_name = symbol_name;
+  kp->pre_handler = handler;
+  
+  ret = register_kprobe(kp);
+  if (ret < 0) {
+    pr_err("register_probe() for symbol %s failed, returned %d\n", symbol_name, ret);
+    return ret;
+  }
+  
+  pr_info("Planted kprobe for symbol %s at %p\n", symbol_name, kp->addr);
+  
+  return ret;
+}
+
+/*   
+*   Interrupt handling variables
+*/
 static struct pci_dev *pdev; /* PCI device */
 static void __iomem *mmio; /* memory mapped I/O */
 static int pci_irq;
@@ -30,7 +76,8 @@ static struct pci_device_id pci_ids[] = {
 };
 MODULE_DEVICE_TABLE(pci, pci_ids);
 
-static irqreturn_t irq_handler(int irq, void *dev){
+static irqreturn_t irq_handler(int irq, void *dev)
+{
     u32 irq_status;
     printk("Got an interrupt");
     /* ack the interrupt */
@@ -41,7 +88,8 @@ static irqreturn_t irq_handler(int irq, void *dev){
     return IRQ_HANDLED;
 }
 
-static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id){
+static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
+{
     u8 val;
     u32 device_version;
     pdev = dev;
@@ -71,7 +119,8 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id){
     return 0;
 }
 
-static void pci_remove(struct pci_dev *dev){
+static void pci_remove(struct pci_dev *dev)
+{
 	pr_info("pci_remove\n");
     pci_release_region(dev, BAR);
 }
@@ -83,21 +132,55 @@ static struct pci_driver pci_driver = {
     .remove = pci_remove,
 };
 
-static int m1_init(void) {
+static void walk_irqactions(void)
+{
+    struct irq_desc *desc;
+    struct irqaction *action, **action_ptr;
+    desc = i2d_pointer(pci_irq);
+    action_ptr = &desc->action;                                              
+    action = *action_ptr; 
+    while(action != NULL){
+        printk("Action name: %s\n", action->name);
+        action = action->next;
+    }
+}
+
+
+static int m1_init(void)
+{
+    int ret;
     struct desc_ptr *descriptor = kmalloc(sizeof(struct desc_ptr), GFP_KERNEL);
     store_idt(descriptor);
     printk("FX - Force eXecution started \n");
-    printk("IDT address is 0x%lx", descriptor->address);
+    printk("IDT address is 0x%lx, size %d", descriptor->address, (int)descriptor->size);
     printk("irq_handler_address: %p", irq_handler);
     kfree(descriptor);
+
+    /* double kprobe technique */
+    ret = do_register_kprobe(&kp0, "kallsyms_lookup_name", handler_pre0);
+    if (ret < 0)
+        return ret;  
+    ret = do_register_kprobe(&kp1, "kallsyms_lookup_name", handler_pre1);
+    if (ret < 0) {
+        unregister_kprobe(&kp0);
+        return ret;
+    }
+    unregister_kprobe(&kp0);
+    unregister_kprobe(&kp1);
+    kln_pointer = (unsigned long (*)(const char *name)) kln_addr;
+    i2d_pointer = (struct irq_desc *(*)(int))(kln_pointer("irq_to_desc"));
+    pr_info("irq_to_desc address = %p\n", i2d_pointer);
+
     if(pci_register_driver(&pci_driver) < 0){
         printk("Cannot register PCI driver");
         return 1;
     }
+    walk_irqactions();
     return 0;
 }
 
-static void m1_exit(void) {
+static void m1_exit(void)
+{
     //pci_unregister_driver(&pci_driver);
     printk("FX - Force eXecution removed \n");
 }
