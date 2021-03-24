@@ -40,10 +40,12 @@ KPROBE_PRE_HANDLER(handler_pre0)
   return 0;
 }
 
+
 KPROBE_PRE_HANDLER(handler_pre1)
 {
   return 0;
 }
+
 
 static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handler)
 {
@@ -58,7 +60,7 @@ static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handle
     return ret;
   }
   
-  pr_info("Planted kprobe for symbol %s at %p\n", symbol_name, kp->addr);
+  pr_info("Planted kprobe for symbol %s at %px\n", symbol_name, kp->addr);
   
   return ret;
 }
@@ -69,12 +71,15 @@ static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handle
 static struct pci_dev *pdev; /* PCI device */
 static void __iomem *mmio; /* memory mapped I/O */
 static int pci_irq;
+static struct irq_desc *irq_desc_pci;
+static struct irqaction *irqaction_pci;
 
 static struct pci_device_id pci_ids[] = {
     { PCI_DEVICE(VENDOR_ID, DEVICE_ID), },
     { 0, }
 };
 MODULE_DEVICE_TABLE(pci, pci_ids);
+
 
 static irqreturn_t irq_handler(int irq, void *dev)
 {
@@ -88,10 +93,10 @@ static irqreturn_t irq_handler(int irq, void *dev)
     return IRQ_HANDLED;
 }
 
+
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
     u8 val;
-    u32 device_version;
     pdev = dev;
     if(pci_enable_device(pdev) < 0){
         dev_err(&(pdev->dev), "error in pci_enable_device\n");
@@ -110,20 +115,16 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		dev_err(&(dev->dev), "request_irq\n");
 		return -1;
 	}
-    /* Protect IDT command */
-    iowrite32(0x1, mmio + PROTECT_IDT_COMMAND);
-    /* Checks */
-    device_version = ioread32(mmio + ID_REGISTER);
-    printk("Device version ID: 0x%x", device_version);
-
     return 0;
 }
+
 
 static void pci_remove(struct pci_dev *dev)
 {
 	pr_info("pci_remove\n");
     pci_release_region(dev, BAR);
 }
+
 
 static struct pci_driver pci_driver = { 
     .name = "fx_pci",
@@ -132,29 +133,69 @@ static struct pci_driver pci_driver = {
     .remove = pci_remove,
 };
 
-static void walk_irqactions(void)
+
+static void walk_irqactions(int irq)
 {
     struct irq_desc *desc;
     struct irqaction *action, **action_ptr;
-    desc = i2d_pointer(pci_irq);
+
+    desc = i2d_pointer(irq);
     action_ptr = &desc->action;                                              
     action = *action_ptr; 
+
+    irq_desc_pci = desc;
+    irqaction_pci = action;
+
+    printk("***** irq_desc_pci: %px", irq_desc_pci);
+    printk("***** irqaction_pci: %px", irqaction_pci);
+
+    printk("irq_desc address: %px", (void *)desc);
+
     while(action != NULL){
-        printk("Action name: %s\n", action->name);
+        printk("Action name: %s, address: %px\n", action->name, (void *)action);
         action = action->next;
     }
 }
 
+
+static void protect_idt_hypercall(void)
+{
+   /*  
+   *   putting parameters into registers,
+   *   then triggering the vmexit using the
+   *   out instruction in iowrite 32
+   */
+    struct irq_desc *desc_start;
+    desc_start = i2d_pointer(0);
+    __asm__ volatile("mov %0, %%r8" ::"r"(desc_start));
+    __asm__ volatile("mov %0, %%r9" ::"r"(irq_desc_pci));
+    __asm__ volatile("mov %0, %%r10" ::"r"(irqaction_pci));
+    __asm__ volatile("mov %0, %%r11" ::"r"(sizeof(struct irqaction)));
+    __asm__ volatile("mov %0, %%r12" ::"r"(sizeof(struct irq_desc)));
+    iowrite32(0x1, mmio + PROTECT_IDT_COMMAND);
+}
+
+static void idt_attack_test(struct desc_ptr *descriptor){
+    char *ptr;
+    int (*set_memory_pointer)(unsigned long, int);
+    int (*reset_memory_pointer)(unsigned long, int);
+    set_memory_pointer = (int (*)(unsigned long, int))kln_pointer("set_memory_rw");
+    reset_memory_pointer = (int (*)(unsigned long, int))kln_pointer("set_memory_ro");
+    set_memory_pointer(descriptor->address, 1);
+    ptr = (char *)descriptor->address;
+    *(ptr + 5) = 6;
+    reset_memory_pointer(descriptor->address, 1);
+    return;
+}
 
 static int m1_init(void)
 {
     int ret;
     struct desc_ptr *descriptor = kmalloc(sizeof(struct desc_ptr), GFP_KERNEL);
     store_idt(descriptor);
-    printk("FX - Force eXecution started \n");
+    printk("FX - Forced eXecution module started \n");
     printk("IDT address is 0x%lx, size %d", descriptor->address, (int)descriptor->size);
-    printk("irq_handler_address: %p", irq_handler);
-    kfree(descriptor);
+    printk("irq_handler_address: %px", irq_handler);
 
     /* double kprobe technique */
     ret = do_register_kprobe(&kp0, "kallsyms_lookup_name", handler_pre0);
@@ -169,20 +210,28 @@ static int m1_init(void)
     unregister_kprobe(&kp1);
     kln_pointer = (unsigned long (*)(const char *name)) kln_addr;
     i2d_pointer = (struct irq_desc *(*)(int))(kln_pointer("irq_to_desc"));
-    pr_info("irq_to_desc address = %p\n", i2d_pointer);
+    pr_info("irq_to_desc address = %px\n", i2d_pointer);
 
     if(pci_register_driver(&pci_driver) < 0){
         printk("Cannot register PCI driver");
         return 1;
     }
-    walk_irqactions();
+
+    walk_irqactions(pci_irq);
+    protect_idt_hypercall();
+
+
+    idt_attack_test(descriptor);
+    kfree(descriptor);
+    descriptor = NULL;
     return 0;
 }
 
+
 static void m1_exit(void)
 {
-    //pci_unregister_driver(&pci_driver);
-    printk("FX - Force eXecution removed \n");
+    pci_unregister_driver(&pci_driver);
+    printk("FX - Forced eXecution module removed \n");
 }
 
 module_init(m1_init);
