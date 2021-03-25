@@ -133,31 +133,6 @@ static struct pci_driver pci_driver = {
     .remove = pci_remove,
 };
 
-
-static void walk_irqactions(int irq)
-{
-    struct irq_desc *desc;
-    struct irqaction *action, **action_ptr;
-
-    desc = i2d_pointer(irq);
-    action_ptr = &desc->action;                                              
-    action = *action_ptr; 
-
-    irq_desc_pci = desc;
-    irqaction_pci = action;
-
-    printk("***** irq_desc_pci: %px", irq_desc_pci);
-    printk("***** irqaction_pci: %px", irqaction_pci);
-
-    printk("irq_desc address: %px", (void *)desc);
-
-    while(action != NULL){
-        printk("Action name: %s, address: %px\n", action->name, (void *)action);
-        action = action->next;
-    }
-}
-
-
 static void protect_idt_hypercall(void)
 {
    /*  
@@ -175,17 +150,30 @@ static void protect_idt_hypercall(void)
     iowrite32(0x1, mmio + PROTECT_IDT_COMMAND);
 }
 
-static void idt_attack_test(struct desc_ptr *descriptor){
-    char *ptr;
-    int (*set_memory_pointer)(unsigned long, int);
-    int (*reset_memory_pointer)(unsigned long, int);
-    set_memory_pointer = (int (*)(unsigned long, int))kln_pointer("set_memory_rw");
-    reset_memory_pointer = (int (*)(unsigned long, int))kln_pointer("set_memory_ro");
-    set_memory_pointer(descriptor->address, 1);
-    ptr = (char *)descriptor->address;
-    *(ptr + 5) = 6;
-    reset_memory_pointer(descriptor->address, 1);
-    return;
+static void walk_irqactions(int irq)
+{
+    struct irq_desc *desc;
+    struct irqaction *action, **action_ptr;
+
+    desc = i2d_pointer(irq);
+    if(desc == NULL)
+        return;
+    action_ptr = &desc->action;       
+    if(action_ptr != NULL)                                       
+        action = *action_ptr; 
+    else
+        action = NULL;
+
+    while(action != NULL){
+        printk("IRQ: %d, Action name: %s, address: %px\n", action->irq, (action->name == NULL) ? "no name":action->name, (void *)action);
+        if(!strcmp("fx_irq_handler", action->name)){
+            /* important: set parameters for hypercall */
+            irq_desc_pci = desc;
+            irqaction_pci = action;
+            break;
+        }
+        action = action->next;
+    }
 }
 
 static int m1_init(void)
@@ -195,7 +183,6 @@ static int m1_init(void)
     store_idt(descriptor);
     printk("FX - Forced eXecution module started \n");
     printk("IDT address is 0x%lx, size %d", descriptor->address, (int)descriptor->size);
-    printk("irq_handler_address: %px", irq_handler);
 
     /* double kprobe technique */
     ret = do_register_kprobe(&kp0, "kallsyms_lookup_name", handler_pre0);
@@ -210,7 +197,6 @@ static int m1_init(void)
     unregister_kprobe(&kp1);
     kln_pointer = (unsigned long (*)(const char *name)) kln_addr;
     i2d_pointer = (struct irq_desc *(*)(int))(kln_pointer("irq_to_desc"));
-    pr_info("irq_to_desc address = %px\n", i2d_pointer);
 
     if(pci_register_driver(&pci_driver) < 0){
         printk("Cannot register PCI driver");
@@ -220,8 +206,6 @@ static int m1_init(void)
     walk_irqactions(pci_irq);
     protect_idt_hypercall();
 
-
-    idt_attack_test(descriptor);
     kfree(descriptor);
     descriptor = NULL;
     return 0;

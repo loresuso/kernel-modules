@@ -1,0 +1,1 @@
+cmd_/home/lore/tesi/kernel-development/hello-module/hello.ko := ld -r -m elf_x86_64  --build-id=sha1  -T scripts/module.lds -o /home/lore/tesi/kernel-development/hello-module/hello.ko /home/lore/tesi/kernel-development/hello-module/hello.o /home/lore/tesi/kernel-development/hello-module/hello.mod.o;  true

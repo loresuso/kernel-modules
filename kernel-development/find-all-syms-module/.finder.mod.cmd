@@ -1,1 +1,0 @@
-cmd_/home/lore/MasterThesis/kernel-development/find-all-syms-module/finder.mod := { echo  /home/lore/MasterThesis/kernel-development/find-all-syms-module/finder.o;  echo; } > /home/lore/MasterThesis/kernel-development/find-all-syms-module/finder.mod
