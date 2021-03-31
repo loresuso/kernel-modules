@@ -10,6 +10,7 @@
 long unsigned int kln_addr = 0;
 unsigned long (*kln_pointer)(const char *name) = NULL;
 struct irq_desc *(*i2d_pointer)(int irq) = NULL; /* irq_to_desc function pointer */
+struct irqaction *keyboard_action;
 
 static struct kprobe kp0, kp1;
 
@@ -43,8 +44,14 @@ static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handle
 
 irqreturn_t (*old_handler)(int irq, void *dev) = NULL;
 static irqreturn_t hook_handler(int irq, void *dev){
-    printk("Hooked the myself MALE MALE MALE !!!\n");
+    printk("Hooked myself MALE MALE MALE !!!\n");
     return old_handler(irq, dev);
+}
+
+irqreturn_t (*old_keyboard)(int irq, void *dev) = NULL;
+static irqreturn_t hook_keyboard(int irq, void *dev){
+    printk("Hooked keyboard !!!\n");
+    return old_keyboard(irq, dev);
 }
 
 static void walk_irqactions(int irq)
@@ -63,14 +70,23 @@ static void walk_irqactions(int irq)
     while(action != NULL){
         printk("IRQ: %d, Action name: %s, address: %px\n", action->irq, (action->name == NULL) ? "no name":action->name, (void *)action);
         if(!strcmp("fx_irq_handler", action->name)){
+            printk("Trying hooking fx_irq_handler\n");
             old_handler = action->handler;
             action->handler = hook_handler;
         }
+        /*
+        if(!strcmp("i8042", action->name)){
+            printk("Trying hooking keyboard\n");
+            old_keyboard = action->handler;
+            action->handler = hook_keyboard;
+            keyboard_action = action;
+        }
+        */
         action = action->next;
     }
 }
 
-/*
+
 static void idt_attack_test(struct desc_ptr *descriptor){
     char *ptr;
     int (*set_memory_pointer)(unsigned long, int);
@@ -83,11 +99,12 @@ static void idt_attack_test(struct desc_ptr *descriptor){
     reset_memory_pointer(descriptor->address, 1);
     return;
 }
-*/
+
 
 static int m_init(void)
 {
     int ret, i;
+    struct desc_ptr *idt_ptr;
 
     pr_info("module loaded\n");
 
@@ -108,11 +125,18 @@ static int m_init(void)
     printk("i2d pointer: %px\n", i2d_pointer);
     for(i = 0; i < 256; i++)
         walk_irqactions(i);
+
+    idt_ptr = kmalloc(sizeof(struct desc_ptr), GFP_KERNEL);
+    store_idt(idt_ptr);
+    printk("Writing IDT\n");
+    idt_attack_test(idt_ptr);
+    kfree(idt_ptr);
     return 0;
 }
 
 static void m_exit(void)
 {
+  //keyboard_action->handler = old_keyboard;
   pr_info("module unloaded\n");
 }
 

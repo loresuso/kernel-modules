@@ -1,2 +1,2 @@
 #!/bin/sh
-sudo mount $1 -t ext2 /mnt
+sudo mount ./rootfs.ext2 -t ext2 /mnt

