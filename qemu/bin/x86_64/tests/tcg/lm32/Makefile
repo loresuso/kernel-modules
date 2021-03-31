@@ -1,1 +1,0 @@
-/home/lore/MasterThesis/qemu/tests/tcg/lm32/Makefile
