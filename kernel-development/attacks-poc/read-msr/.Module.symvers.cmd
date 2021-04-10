@@ -1,1 +1,0 @@
-cmd_/home/lore/MasterThesis/kernel-development/attacks-poc/read-msr/Module.symvers := sed 's/\.ko$$/\.o/' /home/lore/MasterThesis/kernel-development/attacks-poc/read-msr/modules.order | scripts/mod/modpost     -o /home/lore/MasterThesis/kernel-development/attacks-poc/read-msr/Module.symvers -e -i Module.symvers   -T -
