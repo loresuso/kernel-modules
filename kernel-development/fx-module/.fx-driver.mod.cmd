@@ -1,0 +1,1 @@
+cmd_/home/lore/MasterThesis/kernel-development/fx-module/fx-driver.mod := { echo  /home/lore/MasterThesis/kernel-development/fx-module/fx-driver.o;  echo; } > /home/lore/MasterThesis/kernel-development/fx-module/fx-driver.mod

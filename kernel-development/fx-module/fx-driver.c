@@ -12,9 +12,9 @@ MODULE_LICENSE("GPL");
 /*
 *    PCI constants
 */
-#define VENDOR_ID 0x1234
-#define DEVICE_ID 0x0609
-#define BAR 0
+#define VENDOR_ID   0x1234
+#define DEVICE_ID   0x0609
+#define BAR         0
 
 #define ID_REGISTER                 0x00
 #define CARD_LIVENESS_REGISTER      0x04
@@ -59,8 +59,7 @@ static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handle
     return ret;
   }
   
-  pr_info("Planted kprobe for symbol %s at %px\n", symbol_name, kp->addr);
-  
+  /*pr_info("Planted kprobe for symbol %s at %px\n", symbol_name, kp->addr);*/
   return ret;
 }
 

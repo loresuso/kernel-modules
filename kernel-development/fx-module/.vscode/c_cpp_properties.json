@@ -3,8 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "/home/lore/tesi/linux",
-                "/home/lore/tesi/linux/include/linux",
+                "/home/lore/MasterThesis/linux",
+                "/home/lore/tesi/MasterThesis/include/linux",
                 "${default}"
             ],
             "defines": [],

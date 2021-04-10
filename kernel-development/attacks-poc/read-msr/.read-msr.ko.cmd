@@ -1,0 +1,1 @@
+cmd_/home/lore/MasterThesis/kernel-development/attacks-poc/read-msr/read-msr.ko := ld -r -m elf_x86_64  --build-id=sha1  -T scripts/module.lds -o /home/lore/MasterThesis/kernel-development/attacks-poc/read-msr/read-msr.ko /home/lore/MasterThesis/kernel-development/attacks-poc/read-msr/read-msr.o /home/lore/MasterThesis/kernel-development/attacks-poc/read-msr/read-msr.mod.o;  true
