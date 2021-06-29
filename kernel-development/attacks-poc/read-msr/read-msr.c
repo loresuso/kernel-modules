@@ -1,6 +1,8 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/bitmap.h>
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Lorenzo Susini");
 
@@ -26,6 +28,7 @@ static int __init msr_test_init(void)
 {
     unsigned long long result;
     const unsigned int msr = IA32_LSTAR;
+    unsigned long *bitmap;
     printk(KERN_INFO "-----------------------------------\n");
     printk(KERN_INFO "|           MSR test              |\n");
     printk(KERN_INFO "-----------------------------------\n");
@@ -33,6 +36,13 @@ static int __init msr_test_init(void)
     result = x86_get_msr(msr);
     printk(KERN_INFO "Read Msr:\t%#x\n", msr);
     printk(KERN_INFO "Result:\t%#llx\n", result);
+
+    printk(KERN_INFO "----------------------------------\n");
+    bitmap = bitmap_zalloc(2050000, GFP_KERNEL);
+    bitmap_set(bitmap, 6, 1);
+    bitmap_free(bitmap);
+    printk("0x%lx", *bitmap);
+    printk(KERN_INFO "----------------------------------\n");
     return 0;
 }
 static void __exit msr_test_exit(void)

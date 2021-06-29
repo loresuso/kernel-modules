@@ -1,11 +1,15 @@
-obj-m:=attack.o
-#all:
-#	make -C /home/lore/MasterThesis/linux M=$(shell pwd) modules
-#clean:
-#	make -C /home/lore/MasterThesis/linux M=$(shell pwd) clean
-
+ifneq ($(KERNELRELEASE),)
+obj-m	:= attack.o
+else
+KDIR ?= /home/lore/MasterThesis/linux
 all:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
-
+	make -C $(KDIR) M=$(shell pwd) modules
 clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	make -C $(KDIR) M=$(shell pwd) clean
+
+#all-host:
+# make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+
+#clean-host:
+#	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+endif
