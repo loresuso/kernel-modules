@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>
 #include <linux/pgtable.h>
+#include <asm/msr.h>
 
 MODULE_AUTHOR("Lorenzo Susini");
 MODULE_LICENSE("GPL");
@@ -88,13 +89,9 @@ static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handle
   kp->pre_handler = handler;
   
   ret = register_kprobe(kp);
-  if (ret < 0) {
+  if (ret < 0) 
     pr_err("register_probe() for symbol %s failed, returned %d\n", 
                 symbol_name, ret);
-    return ret;
-  }
-  
-  /*pr_info("Planted kprobe for symbol %s at %px\n", symbol_name, kp->addr);*/
   return ret;
 }
 
@@ -172,7 +169,11 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	/* IRQ setup */
 	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &val);
 	pci_irq = val;
-	if (request_irq(pci_irq, fx_irq_handler, 0, "fx_fx_irq_handler", NULL) < 0) {
+	if (request_irq(pci_irq, 
+                    fx_irq_handler, 
+                    0, 
+                    "fx_irq_handler", 
+                    NULL) < 0) {
 		dev_err(&(dev->dev), "request_irq\n");
 		return -1;
 	}
@@ -204,7 +205,7 @@ static void generic_hypercall(unsigned int type,
                                 unsigned int size,
                                 unsigned int flag)
 {
-    printk("");
+    printk("hypercall\n");
     /* flag is used only for saving automatic chunks, for now */
     __asm__ volatile(
         "mfence;"
@@ -264,10 +265,26 @@ static void kernel_text_hypercall(void)
     unsigned long start_kernel_text, end_kernel_text, size;
     start_kernel_text = (unsigned long)kln_pointer("_stext");
     end_kernel_text = (unsigned long)kln_pointer("_etext");
+    printk("kernel text %lx, %lx\n", start_kernel_text, end_kernel_text);
     size = end_kernel_text - start_kernel_text;
-    generic_hypercall(PROTECT_MEMORY_HYPERCALL, (void *)start_kernel_text, size, 0);
+    generic_hypercall(PROTECT_MEMORY_HYPERCALL, 
+                        (void *)start_kernel_text, 
+                        size, 
+                        0);
 }
 
+static void kernel_rodata_hypercall(void)
+{
+    unsigned long start_kernel_rodata, end_kernel_rodata, size;
+    start_kernel_rodata = (unsigned long)kln_pointer("__start_rodata");
+    end_kernel_rodata = (unsigned long)kln_pointer("__end_rodata");
+    printk("kernel rodata %lx, %lx\n", start_kernel_rodata, end_kernel_rodata);
+    size = end_kernel_rodata - start_kernel_rodata;
+    generic_hypercall(PROTECT_MEMORY_HYPERCALL, 
+                        (void *)start_kernel_rodata, 
+                        size,
+                        0);
+}
 
 static void walk_irqactions(int irq)
 {
@@ -284,7 +301,7 @@ static void walk_irqactions(int irq)
         action = NULL;
 
     while(action != NULL){
-        if(!strcmp("fx_fx_irq_handler", action->name)){
+        if(!strcmp("fx_irq_handler", action->name)){
             /* important: set parameters for hypercall */
             irq_desc_pci = desc;
             irqaction_pci = action;
@@ -390,6 +407,37 @@ static int init_kallsyms_lookup_name(void)
 }
 
 
+#define MSR_KVM_CR0_PIN_ALLOWED	0x4b564d08
+#define MSR_KVM_CR4_PIN_ALLOWED 0x4b564d09
+#define MSR_KVM_CR0_PINNED 		0x4b564d0a
+#define MSR_KVM_CR4_PINNED 		0x4b564d0b
+#define MSR_KVM_IDTR_PINNED		0x4b564d0c
+
+static void pin_control_registers(void)
+{
+    unsigned long long val;
+    u32 lo, hi, mask;
+
+    mask = U32_MAX;
+
+    val = native_read_msr(MSR_KVM_CR0_PIN_ALLOWED);
+    lo = val & mask;
+    hi = (val >> 32);
+    native_write_msr(MSR_KVM_CR0_PINNED, lo, hi);
+
+    val = native_read_msr(MSR_KVM_CR4_PIN_ALLOWED);
+    lo = val & mask;
+    hi = (val >> 32);
+    native_write_msr(MSR_KVM_CR4_PINNED, lo, hi);
+}
+
+static void pin_idt_register(void)
+{
+    u32 lo = 1;
+    native_write_msr(MSR_KVM_IDTR_PINNED, lo, 0);
+}
+
+
 static int fx_module_init(void)
 {
     int ret;
@@ -419,6 +467,9 @@ static int fx_module_init(void)
     agent_hypercall();
     generic_hypercall(SET_PROCESS_LIST_HYPERCALL, (void *)process_list, 0, 0);
     kernel_text_hypercall();
+    kernel_rodata_hypercall();
+    pin_control_registers();
+    pin_idt_register();
 
     /*
     printk(

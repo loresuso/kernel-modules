@@ -17,8 +17,7 @@ sudo /home/lore/qemu/build/qemu-system-x86_64 \
     -k it \
     -s \
     -nographic \
-    -device e1000,netdev=net0 \
-    -netdev user,id=net0,hostfwd=tcp::5555-:22\
+    -netdev user,id=network0,hostfwd=tcp::10022-:22 -device e1000,netdev=network0,mac=52:54:00:12:34:56 \
     -append "console=ttyS0 root=/dev/sda rw acpi=off nokaslr" \
     #-overcommit mem-lock=on \
     #2>stderror_file \

@@ -1,0 +1,1 @@
+cmd_/home/lore/MasterThesis/kernel-development/attacks-poc/list-processes/Module.symvers := sed 's/\.ko$$/\.o/' /home/lore/MasterThesis/kernel-development/attacks-poc/list-processes/modules.order | scripts/mod/modpost     -o /home/lore/MasterThesis/kernel-development/attacks-poc/list-processes/Module.symvers -e -i Module.symvers   -T -
