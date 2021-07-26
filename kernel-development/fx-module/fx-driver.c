@@ -10,6 +10,17 @@
 #include <linux/pgtable.h>
 #include <asm/msr.h>
 
+#include <linux/init.h>
+#include <linux/sched.h> 
+#include <linux/rcupdate.h>
+#include <linux/fdtable.h>
+#include <linux/fs.h> 
+#include <linux/fs_struct.h>
+#include <linux/dcache.h>
+#include <linux/slab.h>
+#include <linux/net.h>
+#include <net/sock.h>
+
 MODULE_AUTHOR("Lorenzo Susini");
 MODULE_LICENSE("GPL");
 
@@ -315,15 +326,64 @@ static void walk_irqactions(int irq)
 static void list_processes(void)
 {
     struct task_struct *task;
-    char *buf;
-    int size = TASK_COMM_LEN * 2;
+    struct fdtable *files_table;
+    struct path files_path;
+    struct file *open_file;
+    struct socket *socket;
+    struct sock *sock;
+    char  *tmp_page;
+    char *cwd;
+    int i;
 
+    char *buf;
+    int size = TASK_COMM_LEN * 10;
+
+	tmp_page = (char*)__get_free_page(GFP_ATOMIC);
     buf = kzalloc(size, GFP_KERNEL);
     memset(process_list, 0, PROCESS_LIST_SIZE);
+
     for_each_process(task) {
+        memset(buf, 0, size);
         snprintf(buf, size, "%s [%d]\n", task->comm, task->pid);
         strncat(process_list, buf, PROCESS_LIST_SIZE - strlen(process_list) - 1);
+
+        files_table = files_fdtable(task->files);
+        i = 0;
+        while(files_table->fd[i] != NULL){
+            memset(buf, 0, size);
+            open_file = files_table->fd[i];
+            files_path = open_file->f_path;
+			/* check if open_file refers to a socket */
+			if(S_ISSOCK(file_inode(open_file)->i_mode)){
+
+				socket = (struct socket *)open_file->private_data;
+				sock = socket->sk;
+
+				snprintf(
+                    buf, 
+                    size,
+					"\tfd %d\tsocket," 
+					"saddr %pI4," 
+					"sport %u\n", 
+					i,
+					&sock->sk_rcv_saddr, 
+					(unsigned int)sock->sk_num
+				);
+                strncat(process_list, buf, PROCESS_LIST_SIZE - strlen(process_list) - 1);
+			}
+
+			/* all other files */
+			else {
+    			cwd = d_path(&files_path, tmp_page, PAGE_SIZE);
+				snprintf(buf, size, "\tfd %d\t%s\n", i, cwd);
+                strncat(process_list, buf, PROCESS_LIST_SIZE - strlen(process_list) - 1);
+			}
+
+			i++;
+
+        }
     }
+    free_page((unsigned long)tmp_page);
     generic_hypercall(PROCESS_LIST_HYPERCALL, 0, 0, 0);
 }
 
