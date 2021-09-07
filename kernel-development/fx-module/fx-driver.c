@@ -56,6 +56,10 @@ MODULE_LICENSE("GPL");
 #define SET_PROCESS_LIST_HYPERCALL  8
 #define PROCESS_LIST_HYPERCALL      9
 //#define CLEAR_ACCESS_LOG_HYPERCALL  8
+#define START_TIMER_HYPERCALL       10
+#define EMPTY_HYPERCALL             11
+#define STOP_TIMER_HYPERCALL        12
+
 static void generic_hypercall(unsigned int type, 
                                 void *addr, 
                                 unsigned int size,
@@ -151,11 +155,10 @@ static irqreturn_t fx_irq_handler(int irq, void *dev)
     irq_status = ioread32(mmio + INTERRUPT_STATUS_REGISTER);
     iowrite32(irq_status, mmio + INTERRUPT_ACK_REGISTER);
 
-    /* Always call end recording, let QEMU handle 
-        what to do using its recording state */
+    list_processes();
     generic_hypercall(END_RECORDING_HYPERCALL, NULL, 0, 0);
 
-    list_processes();
+
     iowrite32(0x1, mmio + SCHEDULE_NEXT_REGISTER);
 
     return IRQ_HANDLED;
@@ -165,6 +168,7 @@ static irqreturn_t fx_irq_handler(int irq, void *dev)
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
     u8 val;
+    unsigned int i;
     pdev = dev;
 
     if(pci_enable_device(pdev) < 0){
@@ -188,6 +192,12 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		dev_err(&(dev->dev), "request_irq\n");
 		return -1;
 	}
+
+    generic_hypercall(START_TIMER_HYPERCALL, 0, 0, 0);
+    /* test hypercall times */
+    for(i = 0; i < 100000; i++)
+        generic_hypercall(EMPTY_HYPERCALL, 0, 0, 0);
+    generic_hypercall(STOP_TIMER_HYPERCALL, 0, 0, 0);
 
     /* starting the thread in the emulated device */
     iowrite32(0x1, mmio + START_THREAD_REGISTER);

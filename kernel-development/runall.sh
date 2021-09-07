@@ -1,5 +1,6 @@
 #!/bin/sh 
 set -e
+
 sudo mount ./debian-rootfs/example.img -t ext4 /mnt/example
 sudo find /home/lore/MasterThesis/kernel-development/attacks-poc -name '*.ko' -exec cp "{}" /mnt/example/root  \;
 sudo find /home/lore/MasterThesis/kernel-development/fx-module -name '*.ko' -exec cp "{}" /mnt/example/root  \;

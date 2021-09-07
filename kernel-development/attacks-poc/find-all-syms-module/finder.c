@@ -32,7 +32,7 @@ static struct kprobe kp0, kp1;
 KPROBE_PRE_HANDLER(handler_pre0)
 {
   kln_addr = (--regs->ip);
-  
+  printk("Pre handler first kprobe hit\n");
   return 0;
 }
 
@@ -54,7 +54,7 @@ static int do_register_kprobe(struct kprobe *kp, char *symbol_name, void *handle
     return ret;
   }
   
-  pr_info("Planted kprobe for symbol %s at %p\n", symbol_name, kp->addr);
+  pr_info("Planted kprobe for symbol %s at %px\n", symbol_name, kp->addr);
   
   return ret;
 }
@@ -69,7 +69,7 @@ static int m_init(void)
   if (ret < 0)
     return ret;
  
-  ret = do_register_kprobe(&kp1, "kallsyms_lookup_name", handler_pre1);
+  ret = do_register_kprobe(&kp1, "__x64_sys_close", handler_pre1);
   if (ret < 0) {
     unregister_kprobe(&kp0);
     return ret;
@@ -79,12 +79,13 @@ static int m_init(void)
   unregister_kprobe(&kp1);
   
   pr_info("kallsyms_lookup_name address = 0x%lx\n", kln_addr);
-  
+  /*
   kln_pointer = (unsigned long (*)(const char *name)) kln_addr;
   
   pr_info("kallsyms_lookup_name address = 0x%lx\n", kln_pointer("kallsyms_lookup_name"));
 
   pr_info("irq_to_desc address = 0x%lx\n", kln_pointer("irq_to_desc"));
+  */
   
   return 0;
 }
