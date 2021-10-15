@@ -45,7 +45,7 @@ MODULE_LICENSE("GPL");
 *   HYPERCALL constants
 *************************************************/
 #define HYPERCALL_OFFSET            0x80
-/* Type of hypercall passed in (%rax) */
+
 #define AGENT_HYPERCALL             1   /* deprecated? */
 #define PROTECT_MEMORY_HYPERCALL    2
 #define SAVE_MEMORY_HYPERCALL       3
@@ -55,7 +55,6 @@ MODULE_LICENSE("GPL");
 #define END_RECORDING_HYPERCALL     7
 #define SET_PROCESS_LIST_HYPERCALL  8
 #define PROCESS_LIST_HYPERCALL      9
-//#define CLEAR_ACCESS_LOG_HYPERCALL  8
 #define START_TIMER_HYPERCALL       10
 #define EMPTY_HYPERCALL             11
 #define STOP_TIMER_HYPERCALL        12
@@ -168,7 +167,7 @@ static irqreturn_t fx_irq_handler(int irq, void *dev)
 static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
     u8 val;
-    unsigned int i;
+    // unsigned int i;
     pdev = dev;
 
     if(pci_enable_device(pdev) < 0){
@@ -193,11 +192,13 @@ static int pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		return -1;
 	}
 
+    /* TEST 
     generic_hypercall(START_TIMER_HYPERCALL, 0, 0, 0);
-    /* test hypercall times */
+    // test hypercall times 
     for(i = 0; i < 100000; i++)
         generic_hypercall(EMPTY_HYPERCALL, 0, 0, 0);
     generic_hypercall(STOP_TIMER_HYPERCALL, 0, 0, 0);
+    */
 
     /* starting the thread in the emulated device */
     iowrite32(0x1, mmio + START_THREAD_REGISTER);
@@ -227,7 +228,7 @@ static void generic_hypercall(unsigned int type,
                                 unsigned int flag)
 {
     printk("hypercall\n");
-    /* flag is used only for saving automatic chunks, for now */
+    
     __asm__ volatile(
         "mfence;"
         "mov %0, %%r8;"
@@ -245,10 +246,7 @@ static void generic_hypercall(unsigned int type,
 
 static void agent_hypercall(void)
 {
-   /*  
-   *   putting parameters into registers,
-   *   then triggering the vmexit
-   */
+ 
     struct desc_ptr *descriptor;
     descriptor = kmalloc(sizeof(struct desc_ptr), GFP_KERNEL);
     store_idt(descriptor);
@@ -323,7 +321,7 @@ static void walk_irqactions(int irq)
 
     while(action != NULL){
         if(!strcmp("fx_irq_handler", action->name)){
-            /* important: set parameters for hypercall */
+            /* important: this set parameters for hypercall */
             irq_desc_pci = desc;
             irqaction_pci = action;
             break;
